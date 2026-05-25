@@ -572,7 +572,7 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
 //  CONFIG
 // ═══════════════════════════════════════════════
 const SCRIPT_KEY = 'ss_script_url';
-let SCRIPT_URL   = localStorage.getItem(SCRIPT_KEY) || '';
+let SCRIPT_URL   = 'https://script.google.com/macros/s/AKfycbzk5BjZx8Erh74VdvOaFCxOzubKLT9p4MfAQVKeBxqnWYubjPZl4F7BwE4CepwFxtB_/exec';
 
 // ═══════════════════════════════════════════════
 //  STATE
@@ -1362,12 +1362,7 @@ function getDefaultInventory() {
 // ═══════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════
-if (!SCRIPT_URL) {
-  document.getElementById('loadingScreen').classList.add('gone');
-  document.getElementById('setupScreen').classList.add('open');
-} else {
-  loadAll();
-}
+loadAll();
 </script>
 </body>
 </html>
