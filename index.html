@@ -587,6 +587,7 @@ let curFilter = 'all';
 let curMode   = 'sell';
 let curPeriod = 'day';
 let deleteTarget = null;
+let cancelTarget = null;
 let coData    = {};
 
 // ═══════════════════════════════════════════════
@@ -1010,6 +1011,7 @@ function deleteItem() {
 }
 
 async function confirmDelete() {
+  if (cancelTarget !== null) { doConfirmCancel(); return; }
   inv = inv.filter(i=>i.id!==deleteTarget);
   deleteTarget = null;
   document.getElementById('confirmOverlay').classList.remove('open');
@@ -1022,6 +1024,7 @@ async function confirmDelete() {
 
 function cancelDelete() {
   deleteTarget = null;
+  cancelTarget = null;
   document.getElementById('confirmOverlay').classList.remove('open');
 }
 
@@ -1196,18 +1199,25 @@ function renderReport() {
     : '<div class="tx-empty">No close-outs recorded yet.</div>';
 }
 
-async function cancelSale(ts) {
+function cancelSale(ts) {
   const tx = txList.find(t=>t.ts===ts);
   if (!tx) return;
-  if (!confirm('Cancel this sale and restock ' + (tx.items||[]).length + ' item(s)?')) return;
-  // Restock items
+  cancelTarget = ts;
+  document.getElementById('confirmMsg').textContent = 'Cancel this sale of $' + tx.total + ' and restock ' + (tx.items||[]).reduce((a,i)=>a+i.qty,0) + ' item(s)?';
+  document.getElementById('confirmOverlay').classList.add('open');
+}
+
+async function doConfirmCancel() {
+  const ts = cancelTarget;
+  cancelTarget = null;
+  document.getElementById('confirmOverlay').classList.remove('open');
+  const tx = txList.find(t=>t.ts===ts);
+  if (!tx) return;
   (tx.items||[]).forEach(i => {
     const it = inv.find(x=>x.name===i.name);
     if (it) { it.stock += i.qty; it.sold = Math.max(0, it.sold - i.qty); }
   });
-  // Remove transaction
   txList = txList.filter(t=>t.ts!==ts);
-  // Save to Google Sheets
   setSyncStatus('saving', 'Cancelling sale...');
   try {
     await Promise.all([
