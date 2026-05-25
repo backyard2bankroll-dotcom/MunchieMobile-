@@ -351,6 +351,7 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
     <button class="fbtn" id="fb_drinks" onclick="filt('drinks',this)" >Drinks</button>
     <button class="fbtn" id="fb_low"    onclick="filt('low',this)"    >⚠ Low</button>
     <button class="ibtn green" onclick="openAdd()">+ Add Item</button>
+    <button class="ibtn" style="border-color:#1a6fa4;background:#1a6fa4;" onclick="openBulkRestock()">📦 Bulk Restock</button>
   </div>
   <div class="grid" id="invGrid"></div>
 </div>
@@ -603,6 +604,30 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
       </div>
       <button class="save-btn" onclick="applyDiscount()">✓ Apply Discount</button>
       <button class="del-btn" onclick="clearDiscount()">✕ Remove Discount</button>
+    </div>
+  </div>
+</div>
+
+<!-- BULK RESTOCK OVERLAY -->
+<div class="overlay" id="bulkRestockOverlay" onclick="if(event.target===this)closeBulkRestock()">
+  <div class="sheet" style="max-height:92vh;">
+    <div class="sheet-hdr">
+      <div class="sheet-title">📦 Bulk Restock</div>
+      <button class="xbtn" onclick="closeBulkRestock()">✕</button>
+    </div>
+    <div style="padding:10px 14px;background:#dbeeff;border-bottom:2px solid var(--border);font-size:0.8rem;font-weight:700;color:#1a6fa4;">
+      Enter the quantity received for each item. Leave blank to skip.
+    </div>
+    <div style="padding:8px 14px;border-bottom:2px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <input type="text" id="bulkSearch" placeholder="Filter items..." style="flex:1;border:2px solid var(--border);border-radius:6px;padding:9px 12px;font-size:0.95rem;font-weight:700;background:var(--gray);outline:none;" oninput="renderBulkList()">
+      <button onclick="bulkRestockLowOnly()" style="padding:9px 12px;background:#fff3cd;border:2px solid var(--warn);border-radius:6px;font-size:0.78rem;font-weight:800;color:#7a3e00;cursor:pointer;">⚠ Low Only</button>
+      <button onclick="bulkRestockFillAll()" style="padding:9px 12px;background:#d4f5e5;border:2px solid var(--green);border-radius:6px;font-size:0.78rem;font-weight:800;color:#005c35;cursor:pointer;">↺ Fill All to Pack</button>
+    </div>
+    <div id="bulkList" style="overflow-y:auto;max-height:50vh;padding:8px 14px;"></div>
+    <div style="padding:14px;border-top:3px solid var(--border);">
+      <div id="bulkSummary" style="font-size:0.82rem;font-weight:700;color:var(--mid);margin-bottom:10px;"></div>
+      <button class="save-btn" onclick="applyBulkRestock()">✓ Apply Restock</button>
+      <button onclick="closeBulkRestock()" style="width:100%;padding:12px;background:transparent;border:2px solid var(--border);border-radius:8px;font-size:0.9rem;font-weight:800;cursor:pointer;color:var(--mid);">Cancel</button>
     </div>
   </div>
 </div>
@@ -1526,6 +1551,123 @@ function getDefaultInventory() {
     {id:48, name:"Monster - Green",                   cat:"drinks", pack:3,   cost:2.66, price:3,  stock:2,   sold:0},
     {id:49, name:"Monster - White",                   cat:"drinks", pack:3,   cost:2.66, price:3,  stock:2,   sold:0},
   ];
+}
+
+
+// ═══════════════════════════════════════════════
+//  BULK RESTOCK
+// ═══════════════════════════════════════════════
+let bulkRestockData = {};
+
+function openBulkRestock() {
+  bulkRestockData = {};
+  document.getElementById('bulkSearch').value = '';
+  renderBulkList();
+  updateBulkSummary();
+  document.getElementById('bulkRestockOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeBulkRestock() {
+  document.getElementById('bulkRestockOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function renderBulkList() {
+  const q = document.getElementById('bulkSearch').value.toLowerCase();
+  const list = inv.filter(i => i.name.toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name));
+  document.getElementById('bulkList').innerHTML = list.map(i => {
+    const val = bulkRestockData[i.id] !== undefined ? bulkRestockData[i.id] : '';
+    const isLow = i.stock <= Math.ceil(i.pack * 0.2);
+    const isOut = i.stock === 0;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.88rem;font-weight:800;line-height:1.3;">${i.name}</div>
+        <div style="font-size:0.7rem;font-weight:700;color:${isOut?'var(--red)':isLow?'var(--warn)':'var(--mid)'};">
+          ${isOut?'OUT OF STOCK':isLow?'LOW — ':''}${i.stock} in stock · Pack: ${i.pack}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        <button onclick="adjustBulk(${i.id},-1)" style="width:30px;height:30px;border:2px solid var(--border);border-radius:6px;background:var(--gray);font-size:1rem;font-weight:900;cursor:pointer;">−</button>
+        <input type="number" min="0" value="${val}" placeholder="0"
+          style="width:60px;border:2px solid ${val?'var(--blue)':'var(--border)'};border-radius:6px;padding:6px;font-size:0.95rem;font-weight:900;text-align:center;background:${val?'#f0f7ff':'var(--gray)'};"
+          oninput="setBulkVal(${i.id}, this.value)" id="bulk_${i.id}">
+        <button onclick="adjustBulk(${i.id},1)" style="width:30px;height:30px;border:2px solid var(--border);border-radius:6px;background:var(--gray);font-size:1rem;font-weight:900;cursor:pointer;">+</button>
+        <button onclick="setBulkToFull(${i.id})" style="padding:6px 8px;border:2px solid var(--green);border-radius:6px;background:#d4f5e5;font-size:0.7rem;font-weight:900;color:#005c35;cursor:pointer;">FULL</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setBulkVal(id, val) {
+  const n = parseInt(val) || 0;
+  if (n > 0) bulkRestockData[id] = n;
+  else delete bulkRestockData[id];
+  updateBulkSummary();
+}
+
+function adjustBulk(id, delta) {
+  const cur = bulkRestockData[id] || 0;
+  const newVal = Math.max(0, cur + delta);
+  bulkRestockData[id] = newVal;
+  if (newVal === 0) delete bulkRestockData[id];
+  const el = document.getElementById('bulk_'+id);
+  if (el) { el.value = newVal || ''; el.style.borderColor = newVal?'var(--blue)':'var(--border)'; el.style.background = newVal?'#f0f7ff':'var(--gray)'; }
+  updateBulkSummary();
+}
+
+function setBulkToFull(id) {
+  const it = inv.find(i=>i.id===id);
+  if (!it) return;
+  const needed = Math.max(0, it.pack - it.stock);
+  if (needed === 0) { delete bulkRestockData[id]; }
+  else { bulkRestockData[id] = needed; }
+  const el = document.getElementById('bulk_'+id);
+  if (el) { el.value = needed||''; el.style.borderColor = needed?'var(--blue)':'var(--border)'; el.style.background = needed?'#f0f7ff':'var(--gray)'; }
+  updateBulkSummary();
+}
+
+function bulkRestockFillAll() {
+  bulkRestockData = {};
+  inv.forEach(i => {
+    const needed = Math.max(0, i.pack - i.stock);
+    if (needed > 0) bulkRestockData[i.id] = needed;
+  });
+  renderBulkList();
+  updateBulkSummary();
+}
+
+function bulkRestockLowOnly() {
+  bulkRestockData = {};
+  inv.filter(i => i.stock <= Math.ceil(i.pack*0.2)).forEach(i => {
+    const needed = Math.max(0, i.pack - i.stock);
+    if (needed > 0) bulkRestockData[i.id] = needed;
+  });
+  document.getElementById('bulkSearch').value = '';
+  renderBulkList();
+  updateBulkSummary();
+}
+
+function updateBulkSummary() {
+  const ids = Object.keys(bulkRestockData);
+  const totalUnits = ids.reduce((a,id)=>a+(bulkRestockData[id]||0),0);
+  document.getElementById('bulkSummary').textContent = ids.length
+    ? ids.length + ' item(s) · ' + totalUnits + ' units to restock'
+    : 'No items selected yet';
+}
+
+async function applyBulkRestock() {
+  const ids = Object.keys(bulkRestockData);
+  if (!ids.length) { toast('NO ITEMS TO RESTOCK'); return; }
+  ids.forEach(id => {
+    const it = inv.find(i=>i.id===Number(id));
+    if (it) it.stock += bulkRestockData[id];
+  });
+  closeBulkRestock();
+  renderInv();
+  updateHeader();
+  scheduleSave();
+  toast('✓ ' + ids.length + ' ITEMS RESTOCKED');
 }
 
 // ═══════════════════════════════════════════════
