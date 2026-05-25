@@ -111,6 +111,10 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
 .cart-empty { text-align:center; padding:32px 16px; color:var(--mid); font-weight:700; font-size:0.9rem; }
 .cart-row { display:flex; align-items:center; gap:8px; padding:8px 6px; border-bottom:1px solid var(--border); }
 .cart-row-name  { flex:1; font-size:0.85rem; font-weight:700; line-height:1.3; }
+.cart-row.comped { background:#fff8f0; border-left:3px solid var(--warn); }
+.comp-badge { font-size:0.65rem; font-weight:900; background:#fff3cd; color:#7a3e00; padding:2px 6px; border-radius:4px; margin-left:4px; vertical-align:middle; }
+.disc-badge { font-size:0.65rem; font-weight:900; background:#dbeeff; color:#1a6fa4; padding:2px 6px; border-radius:4px; margin-left:4px; vertical-align:middle; }
+.cart-row.discounted { background:#f0f7ff; border-left:3px solid var(--blue); }
 .cart-row-price { font-size:0.9rem; font-weight:900; color:var(--green); white-space:nowrap; }
 .cart-qty { display:flex; align-items:center; gap:4px; }
 .cart-qty button { width:32px; height:32px; border:2px solid var(--border); border-radius:4px; background:var(--gray); font-size:1.1rem; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; }
@@ -156,6 +160,8 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
 .ts-qty  { font-size:0.85rem; font-weight:900; color:var(--green); white-space:nowrap; }
 .ts-rev  { font-size:0.8rem; font-weight:700; color:var(--mid); white-space:nowrap; }
 .rperiod-btn { padding:8px 14px; border-radius:6px; font-size:0.8rem; font-weight:800; border:2px solid #555; background:transparent; color:#888; cursor:pointer; text-transform:uppercase; }
+.chart-tab { padding:7px 12px; border-radius:6px; font-size:0.75rem; font-weight:800; border:2px solid var(--border); background:var(--gray); color:var(--mid); cursor:pointer; text-transform:uppercase; }
+.chart-tab.active { background:var(--green); border-color:var(--green); color:#fff; }
 .rperiod-btn.active { background:var(--white); color:var(--black); border-color:var(--white); }
 .pstat-table { width:100%; border-collapse:collapse; font-size:0.8rem; }
 .pstat-table th,.pstat-table td { padding:8px 10px; border-bottom:1px solid var(--border); text-align:center; }
@@ -332,6 +338,7 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
   <button class="mode-btn" id="modeSell"   onclick="setMode('sell')">🛒 Sell</button>
   <button class="mode-btn" id="modeInv"    onclick="setMode('inv')">📦 Stock</button>
   <button class="mode-btn" id="modeReport" onclick="setMode('report')">📊 Reports</button>
+  <button class="mode-btn" id="modeLow" onclick="setMode('low')" style="position:relative;">⚠ Low<span id="lowBadge" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:0.6rem;font-weight:900;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;" id="lowBadge"></span></button>
 </div>
 
 <!-- INVENTORY VIEW -->
@@ -398,10 +405,23 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
     <button class="rperiod-btn"        id="rpMonth" onclick="setReportPeriod('month')">This Month</button>
     <button class="rperiod-btn"        id="rpAll"   onclick="setReportPeriod('all')">All Time</button>
     <button onclick="openCloseout()" style="width:100%;margin-top:4px;padding:13px;background:#e07800;border:none;border-radius:8px;font-size:0.95rem;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#fff;cursor:pointer;">🌙 End of Day Close-Out</button>
+    <button onclick="sendDailyReport()" id="emailReportBtn" style="width:100%;margin-top:8px;padding:13px;background:#1a6fa4;border:none;border-radius:8px;font-size:0.95rem;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#fff;cursor:pointer;">📧 Email Daily Report</button>
   </div>
   <div style="padding:14px;">
     <div id="rPeriodLabel" style="font-size:0.78rem;font-weight:800;color:var(--mid);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;"></div>
     <div id="rSummary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px;"></div>
+    <div class="stat-section" style="margin-bottom:16px;">
+      <div class="stat-section-hdr green">📈 Revenue Charts</div>
+      <div style="padding:12px;">
+        <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+          <button class="chart-tab active" id="ctab_daily"   onclick="setChartTab('daily')">Daily (30 days)</button>
+          <button class="chart-tab"        id="ctab_weekly"  onclick="setChartTab('weekly')">Weekly (12 wks)</button>
+          <button class="chart-tab"        id="ctab_monthly" onclick="setChartTab('monthly')">Monthly (12 mo)</button>
+        </div>
+        <canvas id="revenueChart" style="width:100%;height:220px;"></canvas>
+        <div id="chartEmpty" style="display:none;text-align:center;padding:32px;color:var(--mid);font-weight:700;">No data yet for this period.</div>
+      </div>
+    </div>
     <div class="stat-section" style="margin-bottom:16px;">
       <div class="stat-section-hdr blue">🏆 Top Sellers</div>
       <div id="rTopSellers" style="padding:8px;"></div>
@@ -421,6 +441,14 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
       <div id="rCloseoutHistory" style="max-height:300px;overflow-y:auto;"></div>
     </div>
   </div>
+</div>
+
+<!-- LOW STOCK VIEW -->
+<div id="lowView" style="display:none;">
+  <div style="background:var(--warn);color:#fff;padding:12px 16px;font-size:0.8rem;font-weight:800;text-transform:uppercase;letter-spacing:1px;">
+    ⚠ Items need restocking — tap any item to update stock
+  </div>
+  <div id="lowGrid" style="padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;"></div>
 </div>
 
 <!-- ITEM EDIT SHEET -->
@@ -549,6 +577,32 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
         <button class="co-btn cancel" onclick="closeCloseout()">Cancel</button>
         <button class="co-btn commit" onclick="commitCloseout()">✓ Close Out Day</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- DISCOUNT OVERLAY -->
+<div class="overlay" id="discOverlay" onclick="if(event.target===this)closeDiscount()">
+  <div class="sheet">
+    <div class="sheet-hdr">
+      <div class="sheet-title">🏷 Apply Discount</div>
+      <button class="xbtn" onclick="closeDiscount()">✕</button>
+    </div>
+    <div class="edit-sec">
+      <div style="font-size:0.85rem;font-weight:700;color:var(--mid);margin-bottom:16px;" id="discItemName"></div>
+      <div class="sec-lbl">Percentage Off</div>
+      <div class="field">
+        <label>% Discount (e.g. 10 for 10% off)</label>
+        <input id="discPctInput" type="number" min="0" max="100" placeholder="10" oninput="document.getElementById('discDollarInput').value=''">
+      </div>
+      <div style="text-align:center;font-size:0.8rem;font-weight:800;color:var(--mid);margin:8px 0;">— OR —</div>
+      <div class="sec-lbl">Dollar Amount Off</div>
+      <div class="field">
+        <label>$ Discount (e.g. 1 for  off)</label>
+        <input id="discDollarInput" type="number" min="0" step="0.50" placeholder="1.00" oninput="document.getElementById('discPctInput').value=''">
+      </div>
+      <button class="save-btn" onclick="applyDiscount()">✓ Apply Discount</button>
+      <button class="del-btn" onclick="clearDiscount()">✕ Remove Discount</button>
     </div>
   </div>
 </div>
@@ -712,6 +766,11 @@ function updateHeader() {
   const lowEl = document.getElementById('hLow');
   if (lowCount > 0) { lowEl.textContent = '⚠ ' + lowCount + ' low'; lowEl.style.display=''; }
   else { lowEl.style.display = 'none'; }
+  // Update low tab badge
+  const lb = document.getElementById('lowBadge');
+  if (lb) { lb.textContent = lowCount; lb.style.display = lowCount>0?'flex':'none'; }
+  // Show browser notification if new low items
+  checkLowNotifications();
 }
 
 function getTodayRev() {
@@ -729,12 +788,15 @@ function setMode(mode) {
   document.getElementById('invView').style.display    = mode==='inv'    ? 'block' : 'none';
   document.getElementById('posView').style.display    = mode==='sell'   ? 'block' : 'none';
   document.getElementById('reportView').style.display = mode==='report' ? 'block' : 'none';
+  document.getElementById('lowView').style.display    = mode==='low'    ? 'block' : 'none';
   document.getElementById('modeSell').classList.toggle('active',   mode==='sell');
   document.getElementById('modeInv').classList.toggle('active',    mode==='inv');
   document.getElementById('modeReport').classList.toggle('active', mode==='report');
+  document.getElementById('modeLow').classList.toggle('active',    mode==='low');
   if (mode==='sell')   renderPos();
   if (mode==='inv')    renderInv();
   if (mode==='report') renderReport();
+  if (mode==='low')    renderLowStock();
 }
 
 // ═══════════════════════════════════════════════
@@ -745,7 +807,7 @@ function closeCart() { document.getElementById('cartDrawer').classList.remove('o
 
 function renderPos() {
   const q = document.getElementById('posSearch').value.toLowerCase();
-  const list = inv.filter(i=>i.name.toLowerCase().includes(q));
+  const list = inv.filter(i=>i.name.toLowerCase().includes(q)).sort((a,b)=>b.sold-a.sold);
   document.getElementById('posItems').innerHTML = list.map(it => {
     const inCart = cart.find(c=>c.id===it.id);
     const isOut  = it.stock <= 0;
@@ -789,7 +851,11 @@ function clearCart() {
 }
 
 function renderCart() {
-  const total = cart.reduce((a,c)=>a+c.price*c.qty, 0);
+  const total = cart.reduce((a,c)=>{
+    const base = c.price*c.qty;
+    const discAmt = c.discount ? (c.discType==='pct' ? base*(c.discount/100) : Math.min(c.discount,base)) : 0;
+    return a + (c.comped ? 0 : Math.max(0, base - discAmt));
+  }, 0);
   const qty   = cart.reduce((a,c)=>a+c.qty, 0);
   document.getElementById('cartCount').textContent = cart.length;
   document.getElementById('cartQty').textContent   = qty;
@@ -804,17 +870,71 @@ function renderCart() {
     document.getElementById('cartItems').innerHTML = '<div class="cart-empty">No items added yet.<br>Tap an item to add it.</div>';
     return;
   }
-  document.getElementById('cartItems').innerHTML = cart.map(c => `
-    <div class="cart-row">
-      <div class="cart-row-name">${c.name}</div>
+  document.getElementById('cartItems').innerHTML = cart.map(c => {
+    const base = c.price * c.qty;
+    const discAmt = c.discount ? (c.discType==='pct' ? base*(c.discount/100) : Math.min(c.discount, base)) : 0;
+    const final = c.comped ? 0 : Math.max(0, base - discAmt);
+    const hasDisc = !c.comped && discAmt > 0;
+    return `<div class="cart-row${c.comped?' comped':hasDisc?' discounted':''}">
+      <div class="cart-row-name">${c.name}
+        ${c.comped?'<span class="comp-badge">🎁 COMP</span>':''}
+        ${hasDisc?'<span class="disc-badge">🏷 -'+(c.discType==='pct'?c.discount+'%':'$'+c.discount)+'</span>':''}
+      </div>
       <div class="cart-qty">
         <button onclick="removeFromCart(${c.id})">−</button>
         <span>${c.qty}</span>
         <button onclick="addToCart(${c.id})">+</button>
       </div>
-      <div class="cart-row-price">$${c.price*c.qty}</div>
-    </div>`).join('');
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button onclick="toggleComp(${c.id})" style="background:${c.comped?'#e07800':'transparent'};border:2px solid ${c.comped?'#e07800':'var(--border)'};border-radius:6px;padding:4px 8px;font-size:1rem;cursor:pointer;">🎁</button>
+        <button onclick="openDiscount(${c.id})" style="background:${hasDisc?'#1a6fa4':'transparent'};border:2px solid ${hasDisc?'#1a6fa4':'var(--border)'};border-radius:6px;padding:4px 8px;font-size:1rem;cursor:pointer;">🏷</button>
+        <div class="cart-row-price">${c.comped?'<span style=\"text-decoration:line-through;color:var(--mid);font-size:0.75rem;\">$'+base+'</span> <span style=\"color:var(--warn)\">FREE</span>':hasDisc?'<span style=\"text-decoration:line-through;color:var(--mid);font-size:0.75rem;\">$'+base+'</span> $'+final:'$'+final}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
+
+function toggleComp(id) {
+  const c = cart.find(x=>x.id===id);
+  if (c) { c.comped = !c.comped; if (c.comped) { c.discount=0; c.discType=''; } }
+  renderCart();
+}
+
+function openDiscount(id) {
+  const c = cart.find(x=>x.id===id);
+  if (!c) return;
+  discTargetId = id;
+  document.getElementById('discItemName').textContent = c.name + ' (x' + c.qty + ' @ $' + c.price + ' each)';
+  document.getElementById('discPctInput').value = c.discType==='pct' ? c.discount : '';
+  document.getElementById('discDollarInput').value = c.discType==='dollar' ? c.discount : '';
+  document.getElementById('discOverlay').classList.add('open');
+}
+
+function applyDiscount() {
+  const c = cart.find(x=>x.id===discTargetId);
+  if (!c) return;
+  const pct = parseFloat(document.getElementById('discPctInput').value)||0;
+  const dollar = parseFloat(document.getElementById('discDollarInput').value)||0;
+  if (pct > 0) { c.discount = Math.min(100, pct); c.discType = 'pct'; }
+  else if (dollar > 0) { c.discount = dollar; c.discType = 'dollar'; }
+  else { c.discount = 0; c.discType = ''; }
+  closeDiscount();
+  renderCart();
+}
+
+function clearDiscount() {
+  const c = cart.find(x=>x.id===discTargetId);
+  if (c) { c.discount = 0; c.discType = ''; }
+  closeDiscount();
+  renderCart();
+}
+
+function closeDiscount() {
+  document.getElementById('discOverlay').classList.remove('open');
+  discTargetId = null;
+}
+
+let discTargetId = null;
 
 function selectPay(method) {
   cartPay = cartPay===method ? null : method;
@@ -828,14 +948,23 @@ async function checkout() {
     const it = inv.find(i=>i.id===c.id);
     if (it) { it.stock -= c.qty; it.sold += c.qty; }
   });
-  const total = cart.reduce((a,c)=>a+c.price*c.qty, 0);
+  const total = cart.reduce((a,c)=>{
+    const base = c.price*c.qty;
+    const discAmt = c.discount ? (c.discType==='pct' ? base*(c.discount/100) : Math.min(c.discount,base)) : 0;
+    return a + (c.comped ? 0 : Math.max(0, base - discAmt));
+  }, 0);
   const now   = new Date();
   const tx = {
     ts: now.getTime(),
     time: now.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}),
     total,
     payMethod: cartPay || '',
-    items: cart.map(c=>({name:c.name, qty:c.qty, price:c.price})),
+    items: cart.map(c=>{
+      const base = c.price*c.qty;
+      const discAmt = c.discount ? (c.discType==='pct' ? base*(c.discount/100) : Math.min(c.discount,base)) : 0;
+      const finalPrice = c.comped ? 0 : Math.max(0, base - discAmt);
+      return {name:c.name, qty:c.qty, price:Math.round(finalPrice*100)/100, comped:c.comped||false, discount:c.discount||0, discType:c.discType||''};
+    }),
     type: ''
   };
   txList.unshift(tx);
@@ -1103,6 +1232,7 @@ function periodLabel(p) {
 function renderReport() {
   const [startMs, endMs] = getPeriodRange(curReportPeriod);
   document.getElementById('rPeriodLabel').textContent = periodLabel(curReportPeriod);
+  setTimeout(renderChart, 50);
 
   const periodTx = txList.filter(t=>t.ts>=startMs&&t.ts<endMs);
   const totalRev    = periodTx.reduce((a,t)=>a+t.total,0);
@@ -1396,6 +1526,233 @@ function getDefaultInventory() {
     {id:48, name:"Monster - Green",                   cat:"drinks", pack:3,   cost:2.66, price:3,  stock:2,   sold:0},
     {id:49, name:"Monster - White",                   cat:"drinks", pack:3,   cost:2.66, price:3,  stock:2,   sold:0},
   ];
+}
+
+// ═══════════════════════════════════════════════
+//  LOW STOCK
+// ═══════════════════════════════════════════════
+let lastLowIds = new Set();
+
+function renderLowStock() {
+  const lowItems = inv.filter(i => i.stock <= Math.ceil(i.pack * 0.2));
+  const outItems = inv.filter(i => i.stock === 0);
+  const grid = document.getElementById('lowGrid');
+  if (!lowItems.length && !outItems.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--mid);font-weight:700;font-size:1.1rem;">✅ All items are well stocked!</div>';
+    return;
+  }
+  const allItems = [...outItems, ...lowItems.filter(i=>i.stock>0)];
+  grid.innerHTML = allItems.map(i => {
+    const isOut = i.stock === 0;
+    const pct   = Math.round((i.stock / i.pack) * 100);
+    return `<div style="background:#fff;border:3px solid ${isOut?'var(--red)':'var(--warn)'};border-radius:10px;padding:14px;cursor:pointer;" onclick="openItem(${i.id})">
+      <div style="font-size:0.65rem;font-weight:900;text-transform:uppercase;color:${isOut?'var(--red)':'var(--warn)'};margin-bottom:6px;">${isOut?'🔴 OUT OF STOCK':'🟠 LOW STOCK'}</div>
+      <div style="font-size:0.88rem;font-weight:800;line-height:1.3;margin-bottom:10px;">${i.name}</div>
+      <div style="font-size:2.5rem;font-weight:900;line-height:1;color:${isOut?'var(--red)':'var(--warn)'};">${i.stock}</div>
+      <div style="font-size:0.68rem;font-weight:700;color:var(--mid);margin-bottom:8px;">of ${i.pack} pack</div>
+      <div style="background:var(--gray);border-radius:4px;height:8px;overflow:hidden;margin-bottom:8px;">
+        <div style="height:100%;width:${pct}%;background:${isOut?'var(--red)':'var(--warn)'};border-radius:4px;"></div>
+      </div>
+      <div style="font-size:0.72rem;font-weight:800;color:#555;text-align:center;background:var(--gray);padding:6px;border-radius:6px;">TAP TO RESTOCK</div>
+    </div>`;
+  }).join('');
+}
+
+function checkLowNotifications() {
+  const lowItems = inv.filter(i => i.stock <= Math.ceil(i.pack * 0.2));
+  const newLow = lowItems.filter(i => !lastLowIds.has(i.id));
+  if (newLow.length > 0) {
+    newLow.forEach(i => lastLowIds.add(i.id));
+    if (newLow.length === 1) {
+      showLowBanner(newLow[0].name + ' is running low (' + newLow[0].stock + ' left)');
+    } else {
+      showLowBanner(newLow.length + ' items are running low — check ⚠ Low tab');
+    }
+  }
+  // Remove items that are restocked
+  inv.filter(i => i.stock > Math.ceil(i.pack * 0.2)).forEach(i => lastLowIds.delete(i.id));
+}
+
+let lowBannerTimer = null;
+function showLowBanner(msg) {
+  let banner = document.getElementById('lowBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'lowBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:var(--warn);color:#fff;padding:14px 16px;font-size:0.88rem;font-weight:800;text-align:center;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.2);transform:translateY(-100%);transition:transform 0.3s ease;';
+    banner.onclick = () => { setMode('low'); hideLowBanner(); };
+    document.body.appendChild(banner);
+  }
+  banner.textContent = '⚠ ' + msg + ' — Tap to view';
+  banner.style.transform = 'translateY(0)';
+  clearTimeout(lowBannerTimer);
+  lowBannerTimer = setTimeout(hideLowBanner, 5000);
+}
+
+function hideLowBanner() {
+  const banner = document.getElementById('lowBanner');
+  if (banner) banner.style.transform = 'translateY(-100%)';
+}
+
+
+// ═══════════════════════════════════════════════
+//  EMAIL REPORT
+// ═══════════════════════════════════════════════
+async function sendDailyReport() {
+  const btn = document.getElementById('emailReportBtn');
+  btn.textContent = '⏳ Sending...';
+  btn.disabled = true;
+  setSyncStatus('saving', 'Sending report...');
+  try {
+    const res = await apiGet('sendDailyReport');
+    if (res.ok) {
+      toast('✓ REPORT SENT TO YOUR EMAIL');
+      setSyncStatus('ok', '✓ Live — synced to Google Sheets');
+    } else {
+      toast('ERROR: ' + (res.error||'Could not send'));
+      setSyncStatus('error', '✗ Email failed');
+    }
+  } catch(e) {
+    toast('ERROR SENDING REPORT');
+    setSyncStatus('error', '✗ Email failed');
+  }
+  btn.textContent = '📧 Email Daily Report';
+  btn.disabled = false;
+}
+
+// ═══════════════════════════════════════════════
+//  REVENUE CHARTS
+// ═══════════════════════════════════════════════
+let curChartTab = 'daily';
+let chartInstance = null;
+
+function setChartTab(tab) {
+  curChartTab = tab;
+  ['daily','weekly','monthly'].forEach(t => {
+    document.getElementById('ctab_'+t).classList.toggle('active', t===tab);
+  });
+  renderChart();
+}
+
+function renderChart() {
+  const canvas = document.getElementById('revenueChart');
+  const emptyEl = document.getElementById('chartEmpty');
+  if (!canvas) return;
+
+  const now = new Date();
+  let labels = [], revData = [], profitData = [];
+
+  if (curChartTab === 'daily') {
+    // Last 30 days
+    for (let i=29; i>=0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()-i);
+      const start = d.getTime();
+      const end = start + 86400000;
+      const dayTx = txList.filter(t=>t.ts>=start&&t.ts<end);
+      const rev = dayTx.reduce((a,t)=>a+t.total,0);
+      const cost = dayTx.reduce((a,t)=>a+(t.items||[]).reduce((b,it)=>{ const inv_item=inv.find(x=>x.name===it.name); return b+(inv_item?inv_item.cost:0)*it.qty; },0),0);
+      labels.push((d.getMonth()+1)+'/'+d.getDate());
+      revData.push(rev);
+      profitData.push(rev-cost);
+    }
+  } else if (curChartTab === 'weekly') {
+    // Last 12 weeks
+    for (let i=11; i>=0; i--) {
+      const wStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() - i*7);
+      const wEnd = new Date(wStart.getTime() + 7*86400000);
+      const wTx = txList.filter(t=>t.ts>=wStart.getTime()&&t.ts<wEnd.getTime());
+      const rev = wTx.reduce((a,t)=>a+t.total,0);
+      const cost = wTx.reduce((a,t)=>a+(t.items||[]).reduce((b,it)=>{ const inv_item=inv.find(x=>x.name===it.name); return b+(inv_item?inv_item.cost:0)*it.qty; },0),0);
+      labels.push('Wk '+(12-i));
+      revData.push(rev);
+      profitData.push(rev-cost);
+    }
+  } else {
+    // Last 12 months
+    for (let i=11; i>=0; i--) {
+      const mStart = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      const mEnd   = new Date(now.getFullYear(), now.getMonth()-i+1, 1);
+      const mTx = txList.filter(t=>t.ts>=mStart.getTime()&&t.ts<mEnd.getTime());
+      const rev = mTx.reduce((a,t)=>a+t.total,0);
+      const cost = mTx.reduce((a,t)=>a+(t.items||[]).reduce((b,it)=>{ const inv_item=inv.find(x=>x.name===it.name); return b+(inv_item?inv_item.cost:0)*it.qty; },0),0);
+      const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      labels.push(months[mStart.getMonth()]);
+      revData.push(rev);
+      profitData.push(rev-cost);
+    }
+  }
+
+  const hasData = revData.some(v=>v>0);
+  emptyEl.style.display = hasData ? 'none' : 'block';
+  canvas.style.display  = hasData ? 'block' : 'none';
+  if (!hasData) return;
+
+  // Draw chart manually on canvas
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth;
+  const H = 220;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  ctx.scale(dpr, dpr);
+
+  const pad = { top:20, right:16, bottom:40, left:48 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top  - pad.bottom;
+  const maxVal = Math.max(...revData, 1);
+  const barW   = Math.max(4, cW/labels.length - 4);
+
+  ctx.clearRect(0,0,W,H);
+
+  // Grid lines
+  ctx.strokeStyle = '#e8e8e8';
+  ctx.lineWidth = 1;
+  for (let g=0; g<=4; g++) {
+    const y = pad.top + cH - (g/4)*cH;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W-pad.right, y); ctx.stroke();
+    ctx.fillStyle = '#888';
+    ctx.font = '600 10px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText('$'+Math.round((g/4)*maxVal), pad.left-4, y+4);
+  }
+
+  // Bars — Revenue
+  labels.forEach((lbl, i) => {
+    const x = pad.left + i*(cW/labels.length) + (cW/labels.length - barW)/2;
+    const barH = (revData[i]/maxVal)*cH;
+    const y = pad.top + cH - barH;
+    ctx.fillStyle = revData[i]>0 ? '#00b86b' : '#e8e8e8';
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x, y, barW*0.55, barH, [3,3,0,0]) : ctx.rect(x, y, barW*0.55, barH);
+    ctx.fill();
+
+    // Profit bar (overlaid, narrower, blue)
+    const pBarH = (Math.max(0,profitData[i])/maxVal)*cH;
+    const pY = pad.top + cH - pBarH;
+    ctx.fillStyle = profitData[i]>0 ? 'rgba(26,111,164,0.75)' : 'transparent';
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x + barW*0.55 + 2, pY, barW*0.4, pBarH, [3,3,0,0]) : ctx.rect(x + barW*0.55 + 2, pY, barW*0.4, pBarH);
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = '#888';
+    ctx.font = '600 9px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(lbl, x + barW/2, H - pad.bottom + 14);
+  });
+
+  // Legend
+  ctx.fillStyle = '#00b86b';
+  ctx.fillRect(pad.left, H - pad.bottom + 24, 10, 8);
+  ctx.fillStyle = '#555';
+  ctx.font = '700 10px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('Revenue', pad.left+14, H - pad.bottom + 32);
+
+  ctx.fillStyle = 'rgba(26,111,164,0.75)';
+  ctx.fillRect(pad.left+80, H - pad.bottom + 24, 10, 8);
+  ctx.fillStyle = '#555';
+  ctx.fillText('Profit', pad.left+94, H - pad.bottom + 32);
 }
 
 // ═══════════════════════════════════════════════
