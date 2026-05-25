@@ -1165,12 +1165,13 @@ function renderReport() {
   const PAY = {cash:'💵 Cash', zelle:'⚡ Zelle', cashapp:'$ CashApp', venmo:'🅥 Venmo'};
   document.getElementById('rTransactions').innerHTML = periodTx.length
     ? periodTx.map(tx=>`
-        <div class="tx-row">
+        <div class="tx-row" id="txrow_${tx.ts}">
           <div class="tx-meta">
             <span class="tx-time">${tx.time}${tx.payMethod?`<span class="pay-badge ${tx.payMethod}" style="margin-left:6px;">${PAY[tx.payMethod]||tx.payMethod}</span>`:''}</span>
             <span class="tx-total">$${tx.total}</span>
           </div>
           <div class="tx-items">${(tx.items||[]).map(i=>i.name+(i.qty>1?' x'+i.qty:'')).join(' · ')}</div>
+          <button onclick="cancelSale(${tx.ts})" style="margin-top:8px;width:100%;padding:8px;background:transparent;border:2px solid var(--red);border-radius:6px;color:var(--red);font-size:0.8rem;font-weight:800;cursor:pointer;text-transform:uppercase;">✕ Cancel Sale &amp; Restock</button>
         </div>`).join('')
     : '<div class="tx-empty">No transactions in this period.</div>';
 
@@ -1193,6 +1194,34 @@ function renderReport() {
           </div>`).join('')}
         </div>`).join('')
     : '<div class="tx-empty">No close-outs recorded yet.</div>';
+}
+
+async function cancelSale(ts) {
+  const tx = txList.find(t=>t.ts===ts);
+  if (!tx) return;
+  if (!confirm('Cancel this sale and restock ' + (tx.items||[]).length + ' item(s)?')) return;
+  // Restock items
+  (tx.items||[]).forEach(i => {
+    const it = inv.find(x=>x.name===i.name);
+    if (it) { it.stock += i.qty; it.sold = Math.max(0, it.sold - i.qty); }
+  });
+  // Remove transaction
+  txList = txList.filter(t=>t.ts!==ts);
+  // Save to Google Sheets
+  setSyncStatus('saving', 'Cancelling sale...');
+  try {
+    await Promise.all([
+      api({ action: 'saveInv', inv }),
+      api({ action: 'clearTx' }),
+      ...txList.map(t => api({ action: 'addTx', tx: t }))
+    ]);
+    setSyncStatus('ok', '✓ Live — synced to Google Sheets');
+  } catch(e) {
+    setSyncStatus('error', '✗ Save failed — check connection');
+  }
+  updateHeader();
+  renderReport();
+  toast('SALE CANCELLED — ITEMS RESTOCKED');
 }
 
 function toggleCoDetail(idx) {
