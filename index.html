@@ -162,6 +162,8 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
 .rperiod-btn { padding:8px 14px; border-radius:6px; font-size:0.8rem; font-weight:800; border:2px solid #555; background:transparent; color:#888; cursor:pointer; text-transform:uppercase; }
 .chart-tab { padding:7px 12px; border-radius:6px; font-size:0.75rem; font-weight:800; border:2px solid var(--border); background:var(--gray); color:var(--mid); cursor:pointer; text-transform:uppercase; }
 .chart-tab.active { background:var(--green); border-color:var(--green); color:#fff; }
+.inv-snap-tab { padding:7px 12px; border-radius:6px; font-size:0.75rem; font-weight:800; border:2px solid var(--border); background:var(--gray); color:var(--mid); cursor:pointer; text-transform:uppercase; }
+.inv-snap-tab.active { background:#2c3e50; border-color:#2c3e50; color:#fff; }
 .rperiod-btn.active { background:var(--white); color:var(--black); border-color:var(--white); }
 .pstat-table { width:100%; border-collapse:collapse; font-size:0.8rem; }
 .pstat-table th,.pstat-table td { padding:8px 10px; border-bottom:1px solid var(--border); text-align:center; }
@@ -440,6 +442,19 @@ header h1 { font-size:1.3rem; font-weight:900; letter-spacing:1px; text-transfor
     <div class="stat-section" style="margin-bottom:16px;">
       <div class="stat-section-hdr" style="background:#555;">📋 Close-Out History</div>
       <div id="rCloseoutHistory" style="max-height:300px;overflow-y:auto;"></div>
+    </div>
+    <div class="stat-section" style="margin-bottom:16px;">
+      <div class="stat-section-hdr" style="background:#2c3e50;">📦 Inventory Snapshot</div>
+      <div style="padding:12px 14px;">
+        <div id="invSnapshotCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:14px;"></div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+          <button class="inv-snap-tab active" id="isnap_all"     onclick="setInvSnapTab('all')">All Items</button>
+          <button class="inv-snap-tab"        id="isnap_low"     onclick="setInvSnapTab('low')">⚠ Low/Out</button>
+          <button class="inv-snap-tab"        id="isnap_nosell"  onclick="setInvSnapTab('nosell')">Never Sold</button>
+          <button class="inv-snap-tab"        id="isnap_value"   onclick="setInvSnapTab('value')">By Value</button>
+        </div>
+        <div id="invSnapTable" style="overflow-x:auto;max-height:350px;overflow-y:auto;"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1258,6 +1273,7 @@ function renderReport() {
   const [startMs, endMs] = getPeriodRange(curReportPeriod);
   document.getElementById('rPeriodLabel').textContent = periodLabel(curReportPeriod);
   setTimeout(renderChart, 50);
+  setTimeout(renderInvSnapshot, 50);
 
   const periodTx = txList.filter(t=>t.ts>=startMs&&t.ts<endMs);
   const totalRev    = periodTx.reduce((a,t)=>a+t.total,0);
@@ -1554,6 +1570,91 @@ function getDefaultInventory() {
 }
 
 
+
+// ═══════════════════════════════════════════════
+//  INVENTORY SNAPSHOT REPORT
+// ═══════════════════════════════════════════════
+let curInvSnapTab = 'all';
+
+function setInvSnapTab(tab) {
+  curInvSnapTab = tab;
+  ['all','low','nosell','value'].forEach(t => {
+    document.getElementById('isnap_'+t).classList.toggle('active', t===tab);
+  });
+  renderInvSnapshot();
+}
+
+function renderInvSnapshot() {
+  // Summary cards
+  const totalItems   = inv.length;
+  const totalUnits   = inv.reduce((a,i)=>a+i.stock, 0);
+  const totalCostVal = inv.reduce((a,i)=>a+(i.stock*i.cost), 0);
+  const totalRetail  = inv.reduce((a,i)=>a+(i.stock*Math.round(i.price)), 0);
+  const outCount     = inv.filter(i=>i.stock===0).length;
+  const lowCount     = inv.filter(i=>i.stock>0&&i.stock<=Math.ceil(i.pack*0.2)).length;
+  const neverSold    = inv.filter(i=>i.sold===0).length;
+
+  const potentialProfit = totalRetail - totalCostVal;
+  const marginPct = totalRetail > 0 ? ((potentialProfit/totalRetail)*100).toFixed(0) : 0;
+  document.getElementById('invSnapshotCards').innerHTML = `
+    <div class="rcard"><div class="rc-val">${totalItems}</div><div class="rc-lbl">Total SKUs</div></div>
+    <div class="rcard"><div class="rc-val">${totalUnits}</div><div class="rc-lbl">Units in Stock</div></div>
+    <div class="rcard warn"><div class="rc-val">$${totalCostVal.toFixed(0)}</div><div class="rc-lbl">Inventory Cost</div></div>
+    <div class="rcard green"><div class="rc-val">$${totalRetail.toFixed(0)}</div><div class="rc-lbl">Retail Value</div></div>
+    <div class="rcard blue"><div class="rc-val">$${potentialProfit.toFixed(0)}</div><div class="rc-lbl">Potential Profit</div></div>
+    <div class="rcard" style="border-color:#b8860b;"><div class="rc-val" style="color:#b8860b;">${marginPct}%</div><div class="rc-lbl">Avg Margin</div></div>
+    <div class="rcard red"><div class="rc-val">${outCount}</div><div class="rc-lbl">Out of Stock</div></div>
+    <div class="rcard"><div class="rc-val">${neverSold}</div><div class="rc-lbl">Never Sold</div></div>`;
+
+  // Filter items based on tab
+  let list = [...inv];
+  if (curInvSnapTab === 'low')    list = inv.filter(i=>i.stock<=Math.ceil(i.pack*0.2));
+  if (curInvSnapTab === 'nosell') list = inv.filter(i=>i.sold===0);
+  if (curInvSnapTab === 'value')  list = [...inv].sort((a,b)=>(b.stock*b.price)-(a.stock*a.price));
+  else if (curInvSnapTab === 'all') list = [...inv].sort((a,b)=>a.name.localeCompare(b.name));
+
+  if (!list.length) {
+    document.getElementById('invSnapTable').innerHTML = '<div style="text-align:center;padding:24px;color:var(--mid);font-weight:700;">No items in this category.</div>';
+    return;
+  }
+
+  const maxStock = Math.max(...list.map(i=>i.stock), 1);
+  document.getElementById('invSnapTable').innerHTML =
+    `<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+      <thead><tr style="background:var(--gray);">
+        <th style="padding:8px 8px;text-align:left;font-size:0.68rem;font-weight:900;color:var(--mid);text-transform:uppercase;">Item</th>
+        <th style="padding:8px 4px;text-align:center;font-size:0.68rem;font-weight:900;color:var(--mid);text-transform:uppercase;">Stock</th>
+        <th style="padding:8px 4px;text-align:center;font-size:0.68rem;font-weight:900;color:var(--mid);text-transform:uppercase;">Sold</th>
+        <th style="padding:8px 4px;text-align:right;font-size:0.68rem;font-weight:900;color:var(--mid);text-transform:uppercase;">Cost Val</th>
+        <th style="padding:8px 4px;text-align:right;font-size:0.68rem;font-weight:900;color:var(--mid);text-transform:uppercase;">Retail Val</th>
+        <th style="padding:8px 4px;text-align:center;font-size:0.68rem;font-weight:900;color:var(--mid);text-transform:uppercase;">Status</th>
+      </tr></thead>
+      <tbody>` +
+    list.map(i => {
+      const isOut  = i.stock === 0;
+      const isLow  = i.stock > 0 && i.stock <= Math.ceil(i.pack*0.2);
+      const costVal   = (i.stock * i.cost).toFixed(2);
+      const retailVal = (i.stock * Math.round(i.price)).toFixed(2);
+      const pct = Math.round((i.stock/i.pack)*100);
+      const statusColor = isOut?'var(--red)':isLow?'var(--warn)':'var(--green)';
+      const statusText  = isOut?'OUT':isLow?'LOW':'OK';
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px 8px;font-weight:700;line-height:1.3;">${i.name}</td>
+        <td style="padding:8px 4px;text-align:center;">
+          <div style="font-weight:900;color:${statusColor};">${i.stock}</div>
+          <div style="background:var(--gray);border-radius:3px;height:5px;width:50px;margin:3px auto 0;overflow:hidden;">
+            <div style="height:100%;width:${Math.min(100,pct)}%;background:${statusColor};border-radius:3px;"></div>
+          </div>
+        </td>
+        <td style="padding:8px 4px;text-align:center;font-weight:800;color:${i.sold>0?'var(--green)':'var(--mid)'};">${i.sold||0}</td>
+        <td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--warn);">$${costVal}</td>
+        <td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--green);">$${retailVal}</td>
+        <td style="padding:8px 4px;text-align:center;"><span style="font-size:0.65rem;font-weight:900;padding:2px 7px;border-radius:4px;background:${isOut?'#fde8e8':isLow?'#fff3cd':'#d4f5e5'};color:${statusColor};">${statusText}</span></td>
+      </tr>`;
+    }).join('') +
+    `</tbody></table>`;
+}
+
 // ═══════════════════════════════════════════════
 //  BULK RESTOCK
 // ═══════════════════════════════════════════════
@@ -1577,51 +1678,89 @@ function renderBulkList() {
   const q = document.getElementById('bulkSearch').value.toLowerCase();
   const list = inv.filter(i => i.name.toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name));
   document.getElementById('bulkList').innerHTML = list.map(i => {
-    const val = bulkRestockData[i.id] !== undefined ? bulkRestockData[i.id] : '';
+    const d = bulkRestockData[i.id] || {};
+    const val = d.qty || '';
+    const costVal = d.newCost !== undefined ? d.newCost : '';
     const isLow = i.stock <= Math.ceil(i.pack * 0.2);
     const isOut = i.stock === 0;
-    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:0.88rem;font-weight:800;line-height:1.3;">${i.name}</div>
-        <div style="font-size:0.7rem;font-weight:700;color:${isOut?'var(--red)':isLow?'var(--warn)':'var(--mid)'};">
-          ${isOut?'OUT OF STOCK':isLow?'LOW — ':''}${i.stock} in stock · Pack: ${i.pack}
+    // Calculate weighted avg preview
+    let avgPreview = '';
+    if (d.qty > 0 && d.newCost !== undefined) {
+      const weighted = ((i.stock * i.cost) + (d.qty * d.newCost)) / (i.stock + d.qty);
+      avgPreview = `<div style="font-size:0.68rem;font-weight:800;color:var(--blue);margin-top:3px;">New avg cost: $${weighted.toFixed(3)}/unit</div>`;
+    }
+    return `<div style="padding:10px 0;border-bottom:2px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:0.88rem;font-weight:800;line-height:1.3;">${i.name}</div>
+          <div style="font-size:0.7rem;font-weight:700;color:${isOut?'var(--red)':isLow?'var(--warn)':'var(--mid)'};">
+            ${isOut?'OUT OF STOCK':isLow?'LOW — ':''}${i.stock} in stock · Current cost: $${i.cost.toFixed(3)}
+          </div>
+          ${avgPreview}
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-        <button onclick="adjustBulk(${i.id},-1)" style="width:30px;height:30px;border:2px solid var(--border);border-radius:6px;background:var(--gray);font-size:1rem;font-weight:900;cursor:pointer;">−</button>
-        <input type="number" min="0" value="${val}" placeholder="0"
-          style="width:60px;border:2px solid ${val?'var(--blue)':'var(--border)'};border-radius:6px;padding:6px;font-size:0.95rem;font-weight:900;text-align:center;background:${val?'#f0f7ff':'var(--gray)'};"
-          oninput="setBulkVal(${i.id}, this.value)" id="bulk_${i.id}">
-        <button onclick="adjustBulk(${i.id},1)" style="width:30px;height:30px;border:2px solid var(--border);border-radius:6px;background:var(--gray);font-size:1rem;font-weight:900;cursor:pointer;">+</button>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button onclick="adjustBulk(${i.id},-1)" style="width:30px;height:30px;border:2px solid var(--border);border-radius:6px;background:var(--gray);font-size:1rem;font-weight:900;cursor:pointer;">−</button>
+          <input type="number" min="0" value="${val}" placeholder="Qty"
+            style="width:56px;border:2px solid ${val?'var(--blue)':'var(--border)'};border-radius:6px;padding:6px;font-size:0.9rem;font-weight:900;text-align:center;background:${val?'#f0f7ff':'var(--gray)'};"
+            oninput="setBulkQty(${i.id}, this.value)" id="bulk_${i.id}">
+          <button onclick="adjustBulk(${i.id},1)" style="width:30px;height:30px;border:2px solid var(--border);border-radius:6px;background:var(--gray);font-size:1rem;font-weight:900;cursor:pointer;">+</button>
+        </div>
+        <input type="number" min="0" step="0.01" value="${costVal}" placeholder="New cost $"
+          style="width:90px;border:2px solid ${costVal!==''?'var(--warn)':'var(--border)'};border-radius:6px;padding:6px;font-size:0.9rem;font-weight:900;text-align:center;background:${costVal!==''?'#fff8f0':'var(--gray)'};"
+          oninput="setBulkCost(${i.id}, this.value)" id="bulkcost_${i.id}">
         <button onclick="setBulkToFull(${i.id})" style="padding:6px 8px;border:2px solid var(--green);border-radius:6px;background:#d4f5e5;font-size:0.7rem;font-weight:900;color:#005c35;cursor:pointer;">FULL</button>
       </div>
     </div>`;
   }).join('');
 }
 
-function setBulkVal(id, val) {
+function setBulkQty(id, val) {
   const n = parseInt(val) || 0;
-  if (n > 0) bulkRestockData[id] = n;
-  else delete bulkRestockData[id];
+  if (!bulkRestockData[id]) bulkRestockData[id] = {};
+  if (n > 0) bulkRestockData[id].qty = n;
+  else { delete bulkRestockData[id].qty; if (!Object.keys(bulkRestockData[id]).length) delete bulkRestockData[id]; }
   updateBulkSummary();
+  updateCostPreview(id);
+}
+
+function setBulkCost(id, val) {
+  const n = parseFloat(val);
+  if (!bulkRestockData[id]) bulkRestockData[id] = {};
+  if (!isNaN(n) && val !== '') bulkRestockData[id].newCost = n;
+  else { delete bulkRestockData[id].newCost; }
+  updateBulkSummary();
+  updateCostPreview(id);
+}
+
+function updateCostPreview(id) {
+  // Re-render just this item's avg preview
+  const it = inv.find(i=>i.id===Number(id));
+  const d = bulkRestockData[id] || {};
+  if (!it) return;
+  renderBulkList(); // simplest approach — re-render full list
 }
 
 function adjustBulk(id, delta) {
-  const cur = bulkRestockData[id] || 0;
+  if (!bulkRestockData[id]) bulkRestockData[id] = {};
+  const cur = bulkRestockData[id].qty || 0;
   const newVal = Math.max(0, cur + delta);
-  bulkRestockData[id] = newVal;
-  if (newVal === 0) delete bulkRestockData[id];
+  if (newVal > 0) bulkRestockData[id].qty = newVal;
+  else { delete bulkRestockData[id].qty; if (!Object.keys(bulkRestockData[id]).length) delete bulkRestockData[id]; }
   const el = document.getElementById('bulk_'+id);
   if (el) { el.value = newVal || ''; el.style.borderColor = newVal?'var(--blue)':'var(--border)'; el.style.background = newVal?'#f0f7ff':'var(--gray)'; }
   updateBulkSummary();
+  updateCostPreview(id);
 }
 
 function setBulkToFull(id) {
   const it = inv.find(i=>i.id===id);
   if (!it) return;
   const needed = Math.max(0, it.pack - it.stock);
+  if (!bulkRestockData[id]) bulkRestockData[id] = {};
   if (needed === 0) { delete bulkRestockData[id]; }
-  else { bulkRestockData[id] = needed; }
+  else { bulkRestockData[id].qty = needed; }
   const el = document.getElementById('bulk_'+id);
   if (el) { el.value = needed||''; el.style.borderColor = needed?'var(--blue)':'var(--border)'; el.style.background = needed?'#f0f7ff':'var(--gray)'; }
   updateBulkSummary();
@@ -1631,7 +1770,7 @@ function bulkRestockFillAll() {
   bulkRestockData = {};
   inv.forEach(i => {
     const needed = Math.max(0, i.pack - i.stock);
-    if (needed > 0) bulkRestockData[i.id] = needed;
+    if (needed > 0) bulkRestockData[i.id] = { qty: needed };
   });
   renderBulkList();
   updateBulkSummary();
@@ -1641,7 +1780,7 @@ function bulkRestockLowOnly() {
   bulkRestockData = {};
   inv.filter(i => i.stock <= Math.ceil(i.pack*0.2)).forEach(i => {
     const needed = Math.max(0, i.pack - i.stock);
-    if (needed > 0) bulkRestockData[i.id] = needed;
+    if (needed > 0) bulkRestockData[i.id] = { qty: needed };
   });
   document.getElementById('bulkSearch').value = '';
   renderBulkList();
@@ -1649,25 +1788,38 @@ function bulkRestockLowOnly() {
 }
 
 function updateBulkSummary() {
-  const ids = Object.keys(bulkRestockData);
-  const totalUnits = ids.reduce((a,id)=>a+(bulkRestockData[id]||0),0);
+  const ids = Object.keys(bulkRestockData).filter(id=>bulkRestockData[id].qty>0);
+  const totalUnits = ids.reduce((a,id)=>a+(bulkRestockData[id].qty||0),0);
+  const withNewCost = ids.filter(id=>bulkRestockData[id].newCost!==undefined).length;
   document.getElementById('bulkSummary').textContent = ids.length
-    ? ids.length + ' item(s) · ' + totalUnits + ' units to restock'
+    ? ids.length + ' item(s) · ' + totalUnits + ' units' + (withNewCost?' · '+withNewCost+' with new cost':'')
     : 'No items selected yet';
 }
 
 async function applyBulkRestock() {
-  const ids = Object.keys(bulkRestockData);
+  const ids = Object.keys(bulkRestockData).filter(id=>bulkRestockData[id].qty>0);
   if (!ids.length) { toast('NO ITEMS TO RESTOCK'); return; }
   ids.forEach(id => {
     const it = inv.find(i=>i.id===Number(id));
-    if (it) it.stock += bulkRestockData[id];
+    if (!it) return;
+    const d = bulkRestockData[id];
+    const addQty = d.qty || 0;
+    if (d.newCost !== undefined) {
+      // Weighted average cost
+      const totalOldCost = it.stock * it.cost;
+      const totalNewCost = addQty * d.newCost;
+      const newAvgCost = (it.stock + addQty) > 0
+        ? (totalOldCost + totalNewCost) / (it.stock + addQty)
+        : d.newCost;
+      it.cost = Math.round(newAvgCost * 1000) / 1000;
+    }
+    it.stock += addQty;
   });
   closeBulkRestock();
   renderInv();
   updateHeader();
   scheduleSave();
-  toast('✓ ' + ids.length + ' ITEMS RESTOCKED');
+  toast('✓ ' + ids.length + ' ITEMS RESTOCKED WITH UPDATED COSTS');
 }
 
 // ═══════════════════════════════════════════════
